@@ -159,41 +159,73 @@ function stopRun() {
   if (run.wake) run.wake.release().catch(() => {});
   run = null;
 }
-function renderPractice() {
-  const r = run, p = r.problems[r.i], n = r.problems.length, flash = r.cfg.mode === 'flash';
-  const showing = flash && r.phase !== 'answer';
+function practiceQ() {
+  const r = run, p = r.problems[r.i], flash = r.cfg.mode === 'flash';
   const nums = p.nums;
-  const fs = Math.max(34, Math.min(68, Math.floor(window.innerHeight * 0.5 / (nums.length + 1.6))));
-  let q;
   if (!flash) {
-    q = `<div class="stack" style="font-size:${fs}px">${nums.map((v, i) => `<div class="ln"><span class="sg ${v < 0 ? 'm' : 'p'}">${i === 0 ? '' : v < 0 ? '−' : '+'}</span><span>${Math.abs(v)}</span></div>`).join('')}<hr></div>
+    const fs = Math.max(34, Math.min(68, Math.floor(window.innerHeight * 0.5 / (nums.length + 1.6))));
+    return `<div class="stack" style="font-size:${fs}px">${nums.map((v, i) => `<div class="ln"><span class="sg ${v < 0 ? 'm' : 'p'}">${i === 0 ? '' : v < 0 ? '−' : '+'}</span><span>${Math.abs(v)}</span></div>`).join('')}<hr></div>
       <div class="ansbox" id="ans">${esc(r.answer)}<span class="cur"></span></div>`;
-  } else if (showing) {
+  }
+  if (r.phase !== 'answer') {
     const v = r.fstep >= 0 ? nums[r.fstep] : null;
-    q = `<div class="flashnum" id="fnum" aria-live="assertive" style="color:${v !== null && v < 0 ? 'var(--purple)' : 'var(--rose)'}">${r.phase === 'ready' ? '<span style="font-size:.35em;color:var(--lav-text)">พร้อม…</span>' : r.blank ? '&nbsp;' : signed(v, r.fstep)}</div>
+    return `<div class="flashnum" id="fnum" aria-live="assertive" style="color:${v !== null && v < 0 ? 'var(--purple)' : 'var(--rose)'}">${r.phase === 'ready' ? '<span style="font-size:.35em;color:var(--lav-text)">พร้อม…</span>' : r.blank ? '&nbsp;' : signed(v, r.fstep)}</div>
       <div class="fsteps">${nums.map((_, i) => `<i class="${i <= r.fstep ? 'on' : ''}"></i>`).join('')}</div>
       <div class="muted" style="font-size:17px">${r.phase === 'ready' ? `ข้อ ${r.i + 1} · ตัวเลข ${nums.length} ตัว` : `ตัวที่ ${r.fstep + 1} จาก ${nums.length} · คิดตามในใจ`}</div>`;
-  } else {
-    q = `<div class="h" style="font-size:32px">ผลลัพธ์คือเท่าไร?</div>
+  }
+  return `<div class="h" style="font-size:32px">ผลลัพธ์คือเท่าไร?</div>
       <div class="ansbox" id="ans">${esc(r.answer)}<span class="cur"></span></div>
       ${r.lock ? '' : '<button class="chip" data-act="replay">ดู Flash ข้อนี้อีกครั้ง</button>'}`;
-  }
+}
+function practiceDots() {
+  const r = run;
+  return r.problems.map((_, i) => { const it = r.items[i]; const cls = it ? (r.cfg.feedback ? (it.ok ? 'ok' : 'bad') : 'done') : i === r.i ? 'cur' : ''; return `<span class="${cls}"></span>`; }).join('');
+}
+function renderPractice() {
+  const r = run, n = r.problems.length, flash = r.cfg.mode === 'flash';
   const keys = ['7', '8', '9', '4', '5', '6', '1', '2', '3', 'del', '0', 'ok'];
   return `<div class="screen practice ${flash ? 'flash' : ''}">
   <header class="pbar">
     <button class="iconbtn" data-act="quit" aria-label="ออกจากแบบฝึกหัด">${ICON.close}</button>
-    <div class="pinfo"><div class="t"><span>${r.lesson.label} · ${r.lesson.title}${flash ? ' · Flash ' + r.cfg.speed.toFixed(1) + ' วิ' : ''}</span><b>ข้อ ${Math.min(r.i + 1, n)} / ${n}</b></div>
-      <div class="prog"><i style="width:${r.items.length / n * 100}%"></i></div></div>
+    <div class="pinfo"><div class="t"><span>${r.lesson.label} · ${r.lesson.title}${flash ? ' · Flash ' + r.cfg.speed.toFixed(1) + ' วิ' : ''}</span><b id="pqno">ข้อ ${Math.min(r.i + 1, n)} / ${n}</b></div>
+      <div class="prog"><i id="pprog" style="width:${r.items.length / n * 100}%"></i></div></div>
     <div class="timer tmain"><small>เวลารวม</small><b id="tAll">0:00</b></div>
     <div class="timer q"><small>ข้อนี้</small><b id="tQ">0:00</b></div>
   </header>
   <div class="pbody">
-    <section class="qarea ${flash ? '' : 'card'}" aria-label="โจทย์">${r.toast ? `<div class="toast ${r.toast.ok ? 'ok' : 'bad'}">${r.toast.text}</div>` : ''}${q}</section>
-    <section class="keypad" aria-label="แป้นตัวเลข">${keys.map(k => `<button class="key ${k === 'del' ? 'del' : k === 'ok' ? 'ok' : ''}" data-act="key" data-k="${k}" ${showing || r.lock ? 'disabled' : ''} aria-label="${k === 'del' ? 'ลบตัวเลข' : k === 'ok' ? 'ส่งคำตอบ' : k}">${k === 'del' ? '⌫' : k === 'ok' ? 'ตกลง' : k}</button>`).join('')}</section>
+    <section class="qarea ${flash ? '' : 'card'}" aria-label="โจทย์"><div class="toast" id="ptoast" hidden></div><div class="qinner" id="pq">${practiceQ()}</div></section>
+    <section class="keypad" aria-label="แป้นตัวเลข">${keys.map(k => `<button type="button" class="key ${k === 'del' ? 'del' : k === 'ok' ? 'ok' : ''}" data-k="${k}" aria-label="${k === 'del' ? 'ลบตัวเลข' : k === 'ok' ? 'ส่งคำตอบ' : k}">${k === 'del' ? '⌫' : k === 'ok' ? 'ตกลง' : k}</button>`).join('')}</section>
   </div>
-  <footer class="dots" aria-label="ผลแต่ละข้อ">${r.problems.map((_, i) => { const it = r.items[i]; const cls = it ? (r.cfg.feedback ? (it.ok ? 'ok' : 'bad') : 'done') : i === r.i ? 'cur' : ''; return `<span class="${cls}"></span>`; }).join('')}</footer>
+  <footer class="dots" id="pdots" aria-label="ผลแต่ละข้อ">${practiceDots()}</footer>
   </div>`;
 }
+/* update only the parts that change, so the keypad buttons are never replaced under a finger */
+function updatePractice() {
+  const r = run; if (!r || view.name !== 'practice') return;
+  const n = r.problems.length;
+  const q = document.getElementById('pq'); if (!q) return;
+  q.innerHTML = practiceQ();
+  document.getElementById('pdots').innerHTML = practiceDots();
+  document.getElementById('pprog').style.width = (r.items.length / n * 100) + '%';
+  document.getElementById('pqno').textContent = `ข้อ ${Math.min(r.i + 1, n)} / ${n}`;
+  setKeys();
+}
+function setKeys() {
+  const r = run;
+  const showing = r.cfg.mode === 'flash' && r.phase !== 'answer';
+  document.querySelectorAll('.keypad .key').forEach(b => {
+    const k = b.dataset.k;
+    if (k === 'ok') { b.disabled = showing; b.textContent = r.lock ? 'ต่อไป' : 'ตกลง'; b.setAttribute('aria-label', r.lock ? 'ข้อต่อไป' : 'ส่งคำตอบ'); }
+    else b.disabled = showing || r.lock;
+  });
+}
+function showToast(ok, text, ms) {
+  const r = run, t = document.getElementById('ptoast'); if (!t) return;
+  t.className = 'toast ' + (ok ? 'ok' : 'bad'); t.textContent = text; t.hidden = false;
+  clearTimeout(r.toastT);
+  if (ms) r.toastT = setTimeout(() => { t.hidden = true; }, ms);
+}
+function hideToast() { const t = document.getElementById('ptoast'); if (t) t.hidden = true; if (run) clearTimeout(run.toastT); }
 function afterPractice() {
   const r = run;
   clearInterval(r.tick);
@@ -204,29 +236,40 @@ function afterPractice() {
     if (q) q.textContent = fmtTime(r.lock ? r.lastMs : now - r.qStart);
   };
   upd(); r.tick = setInterval(upd, 250);
+  setKeys();
   if (r.cfg.mode === 'flash' && r.phase === 'ready' && !r.flashing) startFlash();
 }
 function startFlash() {
   const r = run, nums = r.problems[r.i].nums, ms = r.cfg.speed * 1000, gap = Math.min(180, ms * 0.25);
   r.flashing = true; r.phase = 'ready'; r.fstep = -1;
   r.timers.forEach(clearTimeout); r.timers = [];
+  updatePractice();
   const at = (t, fn) => r.timers.push(setTimeout(() => { if (run === r) fn(); }, t));
   let t = 700;
   nums.forEach((_, i) => {
-    at(t, () => { r.phase = 'show'; r.fstep = i; r.blank = false; render(); });
+    at(t, () => { r.phase = 'show'; r.fstep = i; r.blank = false; updatePractice(); });
     at(t + ms - gap, () => { r.blank = true; const el = document.getElementById('fnum'); if (el) el.innerHTML = '&nbsp;'; });
     t += ms;
   });
-  at(t, () => { r.phase = 'answer'; r.blank = false; r.flashing = false; render(); });
+  at(t, () => { r.phase = 'answer'; r.blank = false; r.flashing = false; updatePractice(); });
 }
 function pressKey(k) {
   const r = run;
-  if (!r || r.lock || (r.cfg.mode === 'flash' && r.phase !== 'answer')) return;
+  if (!r || (r.cfg.mode === 'flash' && r.phase !== 'answer')) return;
+  if (r.lock) { if (k === 'ok') nextQuestion(); return; }
   if (k === 'del') r.answer = r.answer.slice(0, -1);
   else if (k === 'ok') { if (r.answer !== '') submit(); return; }
   else if (r.answer.length < r.cfg.digits + 1) r.answer = (r.answer === '0' ? '' : r.answer) + k;
   const el = document.getElementById('ans');
   if (el) el.innerHTML = esc(r.answer) + '<span class="cur"></span>';
+}
+function nextQuestion() {
+  const r = run; if (!r) return;
+  clearTimeout(r.waitT);
+  r.lock = false; r.answer = '';
+  if (r.i + 1 >= r.problems.length) return finish();
+  r.i++; r.qStart = performance.now(); r.phase = r.cfg.mode === 'flash' ? 'ready' : 'answer';
+  if (r.cfg.mode === 'flash') startFlash(); else updatePractice();
 }
 function submit() {
   const r = run, p = r.problems[r.i];
@@ -235,19 +278,16 @@ function submit() {
   const ok = given === p.ans;
   r.items.push({ nums: p.nums, ans: p.ans, given, ok, ms: Math.round(ms), used: p.used, replays: r.replays || 0 });
   r.lastMs = ms; r.replays = 0;
-  const next = () => {
-    if (run !== r) return;
-    r.toast = null; r.lock = false; r.answer = '';
-    if (r.i + 1 >= r.problems.length) return finish();
-    r.i++; r.qStart = performance.now(); r.phase = r.cfg.mode === 'flash' ? 'ready' : 'answer';
-    render();
-  };
-  if (r.cfg.feedback) {
+  if (r.cfg.feedback && !ok) {
+    // wrong: show the answer; tap "ต่อไป" to continue (or it moves on by itself)
     r.lock = true;
-    r.toast = ok ? { ok: true, text: pick(['ถูกต้อง!', 'เก่งมาก!', 'เยี่ยมเลย!', 'ถูกแล้ว!']) } : { ok: false, text: `ยังไม่ถูก · เฉลย ${p.ans}` };
-    render();
-    r.timers.push(setTimeout(next, ok ? 650 : 1600));
-  } else next();
+    updatePractice();
+    showToast(false, `ยังไม่ถูก · เฉลย ${p.ans}`);
+    r.waitT = setTimeout(() => { if (run === r && r.lock) { hideToast(); nextQuestion(); } }, 2500);
+    return;
+  }
+  nextQuestion();
+  if (r.cfg.feedback && run === r) showToast(true, pick(['ถูกต้อง!', 'เก่งมาก!', 'เยี่ยมเลย!', 'ถูกแล้ว!']), 800);
 }
 function finish() {
   const r = run;
@@ -419,8 +459,7 @@ $app.addEventListener('click', e => {
     case 'newex': { const l = lessonById(view.id); el.innerHTML = exampleFor(l, lessonCfg(l)); break; }
     case 'start': startRun(); break;
     case 'again': view = { name: 'setup', id }; startRun(); break;
-    case 'key': pressKey(el.dataset.k); break;
-    case 'replay': if (run && run.phase === 'answer' && !run.lock) { run.replays = (run.replays || 0) + 1; run.answer = ''; run.phase = 'ready'; render(); } break;
+    case 'replay': if (run && run.phase === 'answer' && !run.lock) { run.replays = (run.replays || 0) + 1; run.answer = ''; startFlash(); } break;
     case 'quit': {
       const r = run;
       showModal('ออกจากแบบฝึกหัด?', r && r.items.length ? `ทำไปแล้ว ${r.items.length} ข้อ ถ้าออกตอนนี้จะไม่บันทึกผลชุดนี้` : 'ชุดนี้ยังไม่ได้เริ่มทำ', [{ t: 'ทำต่อ', primary: true }, { t: 'ออก', fn: () => go({ name: 'setup', id: r ? r.lesson.id : 'b1' }) }]);
@@ -431,11 +470,19 @@ $app.addEventListener('click', e => {
     case 'backup': backupModal(); break;
   }
 });
+$app.addEventListener('pointerdown', e => {
+  const b = e.target.closest('.keypad .key');
+  if (!b || b.disabled) return;
+  e.preventDefault();
+  b.classList.add('down'); setTimeout(() => b.classList.remove('down'), 110);
+  pressKey(b.dataset.k);
+});
 $app.addEventListener('change', e => {
   if (e.target.dataset.act === 'sfilter-sel') { view.filter = e.target.value; render(); }
 });
 document.addEventListener('keydown', e => {
   if (view.name !== 'practice' || document.querySelector('.modal')) return;
+  if (e.repeat) return;
   if (/^[0-9]$/.test(e.key)) pressKey(e.key);
   else if (e.key === 'Backspace') pressKey('del');
   else if (e.key === 'Enter') pressKey('ok');
@@ -445,7 +492,7 @@ document.addEventListener('keydown', e => {
 document.addEventListener('visibilitychange', () => {
   if (run && document.visibilityState === 'visible' && navigator.wakeLock) navigator.wakeLock.request('screen').then(w => { if (run) run.wake = w; }).catch(() => {});
 });
-window.addEventListener('resize', () => { if (view.name === 'practice') render(); });
+window.addEventListener('resize', () => { if (view.name === 'practice') updatePractice(); });
 
 render();
 if ('serviceWorker' in navigator && location.protocol === 'https:' && !window.__NO_SW) navigator.serviceWorker.register('./sw.js').catch(() => {});

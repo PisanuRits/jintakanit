@@ -23,7 +23,10 @@ a{color:var(--rose)}
 .btn.primary{background:var(--rose);color:#fff}
 .btn.lilac{background:var(--lilac);color:var(--ink)}
 .btn.ghost{background:#fff;border:1.5px solid var(--line);color:var(--ink)}
-.btn:active,.key:active,.lcard:active,.opt:active{transform:scale(.97)}
+.btn:active,.lcard:active,.opt:active{transform:scale(.97)}
+button{touch-action:manipulation}
+.key{transition:background .08s,transform .08s}
+.key.down{transform:scale(.94);background:var(--rose-l)} .key.ok.down{background:var(--rose-d)}
 .chip{height:44px;padding:0 16px;border-radius:12px;border:1.5px solid var(--line);background:#fff;font-size:15px}
 .chip.on{border:2px solid var(--rose);background:var(--rose-l);color:var(--rose-d)}
 
@@ -117,7 +120,9 @@ a{color:var(--rose)}
 .ansbox{min-width:260px;height:92px;border:3px solid var(--rose);border-radius:18px;background:var(--rose-l);display:flex;align-items:center;justify-content:flex-end;padding:0 24px;font-family:var(--head);font-size:58px;color:var(--rose-d)}
 .ansbox .cur{width:3px;height:56px;background:var(--rose);margin-left:4px;animation:blink 1s steps(1) infinite}
 @keyframes blink{50%{opacity:0}}
-.toast{position:absolute;top:20px;left:50%;transform:translateX(-50%);color:#fff;border-radius:999px;padding:8px 22px;font-family:var(--head);font-size:19px;white-space:nowrap}
+.qinner{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px}
+.toast[hidden]{display:none}
+.toast{position:absolute;z-index:2;top:20px;left:50%;transform:translateX(-50%);color:#fff;border-radius:999px;padding:8px 22px;font-family:var(--head);font-size:19px;white-space:nowrap}
 .toast.ok{background:var(--mint-d)} .toast.bad{background:var(--purple)}
 .keypad{width:min(430px,38vw);display:grid;grid-template-columns:repeat(3,1fr);grid-auto-rows:1fr;gap:14px}
 .key{font-family:var(--head);font-size:40px;border-radius:20px;border:1.5px solid var(--line);background:#fff;color:var(--ink);display:flex;align-items:center;justify-content:center;padding:0}
