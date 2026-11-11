@@ -65,6 +65,7 @@ function renderHome() {
   const gid = DB.group || 'basic';
   const g = GROUPS.find(x => x.id === gid);
   const lessons = LESSONS.filter(l => l.group === gid);
+  const pm = passedMap();
   const today = DB.sessions.filter(s => isToday(s.date));
   const tq = today.reduce((a, s) => a + s.count, 0), tc = today.reduce((a, s) => a + s.correct, 0);
   return `<div class="screen home">
@@ -75,6 +76,7 @@ function renderHome() {
     ${GROUPS.map(x => `<button class="gitem ${x.id === gid ? 'on' : ''}" data-act="group" data-id="${x.id}"><span><span class="n">${x.name}</span><span class="r">${x.range}</span></span><span class="c">${LESSONS.filter(l => l.group === x.id).length}</span></button>`).join('')}
     </div></div>
     <div class="today"><span style="font-size:13px;color:var(--lav-text)">วันนี้</span><b class="h" style="font-size:22px;font-weight:500">ทำไปแล้ว ${today.length} ชุด</b><span style="font-size:14px;color:var(--lav-text)">${tq ? `${tq} ข้อ · ถูก ${tc} ข้อ` : 'ยังไม่ได้เริ่มเลย สู้ ๆ นะ'}</span></div>
+    <div class="ver">เวอร์ชัน ${VERSION}</div>
   </nav>
   <main class="main scroll">
     <header class="mainhead">
@@ -83,7 +85,7 @@ function renderHome() {
     </header>
     <div class="lgrid">
     ${lessons.map(l => { const s = status(l.id); return `<button class="lcard ${l.isTest ? 'test' : ''}" data-act="lesson" data-id="${l.id}">
-      <span class="top"><span>${l.label}</span><i class="dot ${s.st}"></i></span>
+      <span class="top"><span>${l.label}</span><span style="display:flex;align-items:center;gap:6px">${pm[l.id] ? '<span class="passtag">ผ่านแล้ว</span>' : ''}<i class="dot ${s.st}"></i></span></span>
       <span class="f">${l.title}</span>
       <span><span class="m">${l.isTest && s.st === 'new' ? 'สุ่มทุกสูตรในกลุ่ม' : s.meta}</span><span class="bar" style="display:block"><i class="${s.st}" style="width:${s.pct}%"></i></span></span>
     </button>`; }).join('')}
@@ -339,7 +341,11 @@ function renderResult() {
 }
 
 /* ===== Stats ===== */
+function statsTabs(tab) {
+  return `<div class="segtabs"><button class="${tab === 'overview' ? 'on' : ''}" data-act="stab" data-v="overview">ภาพรวม</button><button class="${tab === 'progress' ? 'on' : ''}" data-act="stab" data-v="progress">พัฒนาการ</button></div>`;
+}
 function renderStats() {
+  if (view.tab === 'progress') return renderProgress();
   const f = view.filter || 'all', m = view.mode || 'any';
   let ss = DB.sessions.filter(s => (f === 'all' || s.lesson === f) && (m === 'any' || s.mode === m));
   const used = [...new Set(DB.sessions.map(s => s.lesson))];
@@ -358,7 +364,7 @@ function renderStats() {
   const wmax = weak.length ? weak[0][1] : 1;
   const chip = (k, v, t, cur) => `<button class="chip ${cur === v ? 'on' : ''}" data-act="sfilter" data-k="${k}" data-v="${v}">${t}</button>`;
   return `<div class="screen stats scroll">
-  <header class="shead"><button class="iconbtn" data-act="home" aria-label="กลับไปหน้าบทเรียน">${ICON.back}</button><h1>สถิติย้อนหลัง</h1>
+  <header class="shead"><button class="iconbtn" data-act="home" aria-label="กลับไปหน้าบทเรียน">${ICON.back}</button><h1>สถิติ</h1>${statsTabs('overview')}
     <div style="margin-left:auto;display:flex;gap:8px;flex-wrap:wrap;align-items:center">
       <select class="sel" data-act="sfilter-sel" aria-label="เลือกบทเรียน"><option value="all">ทุกบทเรียน</option>${options.map(l => `<option value="${l.id}" ${f === l.id ? 'selected' : ''}>${l.label} · ${l.title}</option>`).join('')}</select>
       ${chip('mode', 'any', 'ทุกโหมด', m)}${chip('mode', 'all', 'แสดงทั้งหมด', m)}${chip('mode', 'flash', 'Flash', m)}
@@ -389,6 +395,178 @@ function renderStats() {
     </tbody></table>
   </section>`}
   </div>`;
+}
+
+
+/* ===== Progress (พัฒนาการ) ===== */
+const PASS_MIN_COUNT = 30, PASS_ACC = 0.9, PASS_TIMES = 2;
+function passedMap() {
+  // lessonId -> date (ISO) it was passed: 2nd session with >=30 questions and >=90% correct
+  const cnt = {}, out = {};
+  DB.sessions.forEach(s => {
+    if (s.count >= PASS_MIN_COUNT && s.correct / s.count >= PASS_ACC) {
+      cnt[s.lesson] = (cnt[s.lesson] || 0) + 1;
+      if (cnt[s.lesson] === PASS_TIMES) out[s.lesson] = s.date;
+    }
+  });
+  return out;
+}
+function periodStart(d, period) {
+  const x = new Date(d); x.setHours(0, 0, 0, 0);
+  if (period === 'month') { x.setDate(1); return x; }
+  const dow = (x.getDay() + 6) % 7; x.setDate(x.getDate() - dow); return x; // Monday
+}
+function periodsList(period) {
+  const n = period === 'month' ? 6 : 8, out = [];
+  let cur = periodStart(new Date(), period);
+  for (let i = 0; i < n; i++) {
+    out.unshift(new Date(cur));
+    if (period === 'month') cur.setMonth(cur.getMonth() - 1); else cur.setDate(cur.getDate() - 7);
+  }
+  return out;
+}
+const stepsOf = s => s.count * Math.max(1, (s.rows || 2) - 1);
+function lineChart(pts, opt) {
+  // pts: [{label, v|null, txt}] ; opt: {min,max,ticks,color,fill,target,fmt}
+  const W = 560, H = 230, x0 = 44, x1 = 548, y0 = 22, y1 = 196, n = pts.length;
+  const X = i => x0 + (x1 - x0) * (i + 0.5) / n;
+  const Y = v => y1 - (v - opt.min) / (opt.max - opt.min) * (y1 - y0);
+  let g = '';
+  opt.ticks.forEach(t => { g += `<line x1="${x0}" y1="${Y(t)}" x2="${x1}" y2="${Y(t)}" stroke="#FBE9F1"/><text x="${x0 - 8}" y="${Y(t) + 4}" text-anchor="end" font-size="12" fill="#7A5E80">${opt.tickFmt ? opt.tickFmt(t) : t}</text>`; });
+  if (opt.target != null) g += `<line x1="${x0}" y1="${Y(opt.target)}" x2="${x1}" y2="${Y(opt.target)}" stroke="#3FA585" stroke-width="1.5" stroke-dasharray="6 5"/>`;
+  const segs = []; let cur = [];
+  pts.forEach((p, i) => { if (p.v == null) { if (cur.length) segs.push(cur); cur = []; } else cur.push([X(i), Y(Math.max(opt.min, Math.min(opt.max, p.v)))]); });
+  if (cur.length) segs.push(cur);
+  segs.forEach(sg => {
+    const d = sg.map((q, i) => (i ? 'L' : 'M') + q[0].toFixed(1) + ' ' + q[1].toFixed(1)).join(' ');
+    if (sg.length > 1) g += `<path d="${d} L${sg[sg.length - 1][0]} ${y1} L${sg[0][0]} ${y1} Z" fill="${opt.fill}"/>`;
+    g += `<path d="${d}" fill="none" stroke="${opt.color}" stroke-width="3" stroke-linejoin="round" stroke-linecap="round"/>`;
+  });
+  pts.forEach((p, i) => {
+    if (p.v != null) { const y = Y(Math.max(opt.min, Math.min(opt.max, p.v))); g += `<circle cx="${X(i)}" cy="${y}" r="5" fill="#fff" stroke="${opt.color}" stroke-width="2.5"/><text x="${X(i)}" y="${y - 11}" text-anchor="middle" font-size="12" font-weight="600" fill="#4A3352">${p.txt}</text>`; }
+    g += `<text x="${X(i)}" y="${H - 8}" text-anchor="middle" font-size="12" fill="#7A5E80">${p.label}</text>`;
+  });
+  g += `<line x1="${x0}" y1="${y1}" x2="${x1}" y2="${y1}" stroke="#F3DDE8"/>`;
+  return `<svg class="pchart" viewBox="0 0 ${W} ${H}" role="img">${g}</svg>`;
+}
+function niceTicks(lo, hi, count) {
+  const span = hi - lo || 1, raw = span / count, mag = Math.pow(10, Math.floor(Math.log10(raw)));
+  const step = [1, 2, 2.5, 5, 10].map(m => m * mag).find(st => st >= raw) || raw;
+  const a = Math.floor(lo / step) * step, b = Math.ceil(hi / step) * step, t = [];
+  for (let v = a; v <= b + 1e-9; v += step) t.push(+v.toFixed(4));
+  return t;
+}
+function renderProgress() {
+  const period = view.period || 'week', f = view.filter || 'all';
+  const unit = period === 'month' ? 'เดือน' : 'สัปดาห์';
+  const used = [...new Set(DB.sessions.map(s => s.lesson))];
+  const options = LESSONS.filter(l => used.includes(l.id));
+  const ps = periodsList(period);
+  const label = d => period === 'month' ? d.toLocaleDateString('th-TH', { month: 'short' }) : d.toLocaleDateString('th-TH', { day: 'numeric', month: 'short' });
+  const startT = ps[0].getTime();
+  const sess = DB.sessions.filter(s => f === 'all' || s.lesson === f);
+  const buckets = ps.map(p => ({ start: p, label: label(p), ss: [] }));
+  sess.forEach(s => {
+    const t = periodStart(s.date, period).getTime();
+    const b = buckets.find(b => b.start.getTime() === t);
+    if (b) b.ss.push(s);
+  });
+  buckets.forEach(b => {
+    const q = b.ss.reduce((a, s) => a + s.count, 0), c = b.ss.reduce((a, s) => a + s.correct, 0);
+    b.q = q; b.acc = q ? c / q * 100 : null;
+    const sa = b.ss.filter(s => s.mode !== 'flash');
+    const st = sa.reduce((a, s) => a + stepsOf(s), 0);
+    b.spd = st ? sa.reduce((a, s) => a + s.totalMs, 0) / st / 1000 : null;
+    b.days = new Set(b.ss.map(s => new Date(s.date).toDateString())).size;
+  });
+  const pm = passedMap();
+  const passDates = Object.values(pm).map(d => new Date(d).getTime());
+  buckets.forEach((b, i) => {
+    const end = i + 1 < buckets.length ? buckets[i + 1].start.getTime() : Infinity;
+    b.pass = passDates.filter(t => t < end).length;
+    b.newPass = Object.entries(pm).filter(([, d]) => { const t = new Date(d).getTime(); return t >= b.start.getTime() && t < end; }).map(([id]) => id);
+  });
+  const L = buckets[buckets.length - 1];
+  const prevWith = key => { for (let i = buckets.length - 2; i >= 0; i--) if (buckets[i][key] != null && buckets[i].q) return buckets[i]; return null; };
+  const anyData = buckets.some(b => b.q);
+  const hdr = `<header class="shead"><button class="iconbtn" data-act="home" aria-label="กลับไปหน้าบทเรียน">${ICON.back}</button><h1>สถิติ</h1>${statsTabs('progress')}
+    <div style="margin-left:auto;display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+      <select class="sel" data-act="sfilter-sel" aria-label="เลือกบทเรียน"><option value="all">ทุกบทเรียน</option>${options.map(l => `<option value="${l.id}" ${f === l.id ? 'selected' : ''}>${l.label} · ${l.title}</option>`).join('')}</select>
+      <button class="chip ${period === 'week' ? 'on' : ''}" data-act="period" data-v="week">รายสัปดาห์</button><button class="chip ${period === 'month' ? 'on' : ''}" data-act="period" data-v="month">รายเดือน</button>
+    </div></header>`;
+  if (!anyData) return `<div class="screen stats scroll">${hdr}<div class="card empty">ยังไม่มีข้อมูลใน ${buckets.length} ${unit}ล่าสุด<br>ฝึกไปสักพักแล้วกราฟพัฒนาการจะขึ้นที่นี่</div></div>`;
+
+  // KPIs
+  const pA = prevWith('acc'), pS = prevWith('spd');
+  const up = '#2F8F70', down = '#B5602F', neu = '#7A5E80';
+  const k1 = L.acc != null ? { v: Math.round(L.acc) + '%', d: pA ? (L.acc >= pA.acc ? `▲ ${Math.round(L.acc - pA.acc)} จุด` : `▼ ${Math.round(pA.acc - L.acc)} จุด`) + ` จาก${unit}ก่อน` : 'ยังไม่มีช่วงก่อนให้เทียบ', c: pA ? (L.acc >= pA.acc ? up : down) : neu } : { v: '–', d: `${unit}นี้ยังไม่ได้ฝึก`, c: neu };
+  const k2 = L.spd != null ? { v: L.spd.toFixed(1) + ' วิ', d: pS ? (L.spd <= pS.spd ? `▼ เร็วขึ้น ${Math.round((pS.spd - L.spd) / pS.spd * 100)}%` : `▲ ช้าลง ${Math.round((L.spd - pS.spd) / pS.spd * 100)}%`) + ` จาก${unit}ก่อน` : 'ยังไม่มีช่วงก่อนให้เทียบ', c: pS ? (L.spd <= pS.spd ? up : down) : neu } : { v: '–', d: 'คิดจากโหมดแสดงทั้งหมด', c: neu };
+  const P = buckets[buckets.length - 2];
+  const k3 = { v: L.q + ' ข้อ', d: `${L.days} วัน · ${P && P.q ? (L.q >= P.q ? 'มากกว่า' : 'น้อยกว่า') + unit + 'ก่อน' : unit + 'นี้'}`, c: P && P.q && L.q < P.q ? down : up };
+  let k4, panel4;
+  if (f === 'all') {
+    const nNew = L.newPass.length;
+    k4 = { l: 'บทที่ผ่านแล้ว', v: `${L.pass} / ${LESSONS.length}`, d: nNew ? `+${nNew} บท ใน${unit}นี้` : `${unit}นี้ยังไม่มีบทที่ผ่านเพิ่ม`, c: nNew ? up : neu };
+    const maxP = Math.max(4, ...buckets.map(b => b.pass));
+    const recentNew = [...buckets].reverse().find(b => b.newPass.length);
+    panel4 = `<section class="card panel"><div class="phead"><h2>บทที่ผ่านแล้ว (สะสม)</h2><span>จากทั้งหมด ${LESSONS.length} บท</span></div>
+      <div class="pwrap">${stepChart(buckets, maxP)}
+      <div class="passbox"><div style="font-size:13px;color:var(--lav-text)">${recentNew ? (recentNew === L ? `ผ่านใน${unit}นี้` : `ผ่านล่าสุด (${recentNew.label})`) : 'ยังไม่มีบทที่ผ่าน'}</div>
+      ${(recentNew ? recentNew.newPass : []).slice(0, 4).map(id => { const l = lessonById(id); return `<div class="passitem"><i class="dot good" style="width:8px;height:8px"></i>${l.label} · ${l.title}</div>`; }).join('')}
+      <div style="margin-top:auto;font-size:13px;color:var(--lav-text)">เกณฑ์ผ่าน: ถูก ≥ 90% ในชุด 30 ข้อขึ้นไป 2 ครั้ง</div></div></div></section>`;
+  } else {
+    const l = lessonById(f);
+    const ls = DB.sessions.filter(s => s.lesson === f && s.mode !== 'flash');
+    const best = ls.length ? Math.min(...ls.map(s => s.totalMs / stepsOf(s) / 1000)) : null;
+    const q30 = DB.sessions.filter(s => s.lesson === f && s.count >= PASS_MIN_COUNT && s.correct / s.count >= PASS_ACC).length;
+    k4 = { l: 'สถานะบทนี้', v: pm[f] ? 'ผ่านแล้ว' : `${Math.min(q30, PASS_TIMES)} / ${PASS_TIMES}`, d: pm[f] ? 'ผ่านเมื่อ ' + fmtDate(pm[f]) : 'ครั้งที่ถึงเกณฑ์ผ่าน', c: pm[f] ? up : neu };
+    panel4 = `<section class="card panel"><div class="phead"><h2>สถิติเด่นของบทนี้</h2><span>${l.label} · ${l.title}</span></div>
+      <div class="minis" style="grid-template-columns:1fr 1fr">
+        <div class="mini"><small>เร็วที่สุดต่อขั้น</small><b>${best != null ? best.toFixed(1) + ' วิ' : '–'}</b></div>
+        <div class="mini"><small>ทำไปแล้วทั้งหมด</small><b>${DB.sessions.filter(s => s.lesson === f).length} ชุด</b></div>
+        <div class="mini"><small>ถูกมากที่สุด</small><b>${Math.max(...DB.sessions.filter(s => s.lesson === f).map(s => Math.round(s.correct / s.count * 100)))}%</b></div>
+        <div class="mini"><small>ถึงเกณฑ์ผ่าน</small><b>${q30} ครั้ง</b></div>
+      </div><div class="muted" style="font-size:13px">เกณฑ์ผ่าน: ถูก ≥ 90% ในชุด 30 ข้อขึ้นไป 2 ครั้ง</div></section>`;
+  }
+  const accVals = buckets.map(b => b.acc).filter(v => v != null);
+  const accMin = Math.min(70, Math.floor(Math.min(...accVals) / 10) * 10);
+  const spdVals = buckets.map(b => b.spd).filter(v => v != null);
+  const sLo = spdVals.length ? Math.min(...spdVals) : 1, sHi = spdVals.length ? Math.max(...spdVals) : 4;
+  const sT = niceTicks(Math.max(0, sLo - (sHi - sLo) * 0.3 - 0.2), sHi + (sHi - sLo) * 0.3 + 0.2, 3);
+  const accChart = lineChart(buckets.map(b => ({ label: b.label, v: b.acc, txt: b.acc != null ? Math.round(b.acc) + '%' : '' })), { min: accMin, max: 100, ticks: niceTicks(accMin, 100, 3), color: '#C2477A', fill: '#FDE3EE', target: 90 });
+  const spdChart = spdVals.length ? lineChart(buckets.map(b => ({ label: b.label, v: b.spd, txt: b.spd != null ? b.spd.toFixed(1) : '' })), { min: sT[0], max: sT[sT.length - 1], ticks: sT, color: '#8A63D2', fill: '#F1EAFE', tickFmt: t => t.toFixed(1) }) : '<div class="empty" style="padding:30px">ยังไม่มีชุดโหมด "แสดงโจทย์ทั้งหมด" ในช่วงนี้</div>';
+  const maxQ = Math.max(...buckets.map(b => b.q), 1) * 1.25;
+  let vb = ''; const n = buckets.length, bw = Math.min(46, 504 / n * 0.55);
+  buckets.forEach((b, i) => {
+    const cx = 44 + 504 * (i + 0.5) / n, h = b.q / maxQ * 170;
+    if (b.q) vb += `<rect x="${cx - bw / 2}" y="${196 - h}" width="${bw}" height="${h}" rx="7" fill="${i === n - 1 ? '#C2477A' : '#F7B2CF'}"/><text x="${cx}" y="${196 - h - 8}" text-anchor="middle" font-size="12" font-weight="600" fill="#4A3352">${b.q}</text>`;
+    if (b.days) vb += `<circle cx="${cx}" cy="182" r="11" fill="#fff"/><text x="${cx}" y="186" text-anchor="middle" font-size="12" font-weight="600" fill="#C2477A">${b.days}</text>`;
+    vb += `<text x="${cx}" y="222" text-anchor="middle" font-size="12" fill="#7A5E80">${b.label}</text>`;
+  });
+  vb += `<line x1="44" y1="196" x2="548" y2="196" stroke="#F3DDE8"/>`;
+  const kpi = (l, k) => `<div class="card kpi"><small>${l}</small><b>${k.v}</b><span style="color:${k.c};font-weight:500">${k.d}</span></div>`;
+  return `<div class="screen stats scroll">${hdr}
+  <div class="kpis">${kpi('ความแม่นยำ · ' + unit + 'นี้', k1)}${kpi('ความเร็วต่อขั้น · ' + unit + 'นี้', k2)}${kpi('ฝึกไปแล้ว · ' + unit + 'นี้', k3)}${kpi(k4.l, k4)}</div>
+  <div class="pgrid">
+    <section class="card panel"><div class="phead"><h2>ความแม่นยำ</h2><span>% ข้อที่ตอบถูก · เส้นประ = เกณฑ์ผ่าน 90%</span></div>${accChart}</section>
+    <section class="card panel"><div class="phead"><h2>ความเร็วต่อขั้น</h2><span>วินาทีต่อการบวก/ลบ 1 ครั้ง · ยิ่งต่ำยิ่งเร็ว</span></div>${spdChart}</section>
+    <section class="card panel"><div class="phead"><h2>ปริมาณการฝึก</h2><span><i class="dot" style="background:#F7B2CF;border-radius:2px;width:10px;height:10px"></i> จำนวนข้อ · ตัวเลขในวงกลม = วันที่ฝึก</span></div><svg class="pchart" viewBox="0 0 560 230" role="img">${vb}</svg></section>
+    ${panel4}
+  </div>
+  <div class="muted" style="font-size:13px">ความเร็วต่อขั้นคิดจากโหมด "แสดงโจทย์ทั้งหมด" เท่านั้น เพราะเวลาของโหมด Flash ขึ้นกับความเร็วที่ตั้งไว้</div>
+  </div>`;
+}
+function stepChart(buckets, maxP) {
+  const W = 390, x0 = 36, x1 = 382, y0 = 22, y1 = 196, n = buckets.length;
+  const X = i => x0 + (x1 - x0) * (i + 0.5) / n, Y = v => y1 - v / maxP * (y1 - y0);
+  const ticks = niceTicks(0, maxP, 2);
+  let g = '';
+  ticks.forEach(t => { g += `<line x1="${x0}" y1="${Y(t)}" x2="${x1}" y2="${Y(t)}" stroke="#FBE9F1"/><text x="${x0 - 8}" y="${Y(t) + 4}" text-anchor="end" font-size="12" fill="#7A5E80">${t}</text>`; });
+  let d = '';
+  buckets.forEach((b, i) => { d += i ? ` L${X(i)} ${Y(buckets[i - 1].pass)} L${X(i)} ${Y(b.pass)}` : `M${X(i)} ${Y(b.pass)}`; });
+  g += `<path d="${d} L${X(n - 1)} ${y1} L${X(0)} ${y1} Z" fill="#DDF2EA"/><path d="${d}" fill="none" stroke="#3FA585" stroke-width="3" stroke-linejoin="round"/>`;
+  buckets.forEach((b, i) => { g += `<text x="${X(i)}" y="${Y(b.pass) - 8}" text-anchor="middle" font-size="12" font-weight="600" fill="#2F8F70">${b.pass}</text><text x="${X(i)}" y="222" text-anchor="middle" font-size="11" fill="#7A5E80">${b.label}</text>`; });
+  return `<svg class="pchart" style="flex:1.6" viewBox="0 0 ${W} 230" role="img">${g}</svg>`;
 }
 
 /* ===== Modal ===== */
@@ -445,7 +623,7 @@ $app.addEventListener('click', e => {
   if (el.tagName === 'A') e.preventDefault();
   switch (a) {
     case 'home': go({ name: 'home' }); break;
-    case 'stats': go({ name: 'stats', filter: id || 'all' }); break;
+    case 'stats': go({ name: 'stats', filter: id || 'all', tab: view.name === 'stats' ? view.tab : 'overview' }); break;
     case 'group': DB.group = id; save(); render(); break;
     case 'lesson': go({ name: 'setup', id }); break;
     case 'pref': {
@@ -467,6 +645,8 @@ $app.addEventListener('click', e => {
     }
     case 'session': go({ name: 'result', id }); break;
     case 'sfilter': view.mode = el.dataset.v; render(); break;
+    case 'stab': view.tab = el.dataset.v; render(); break;
+    case 'period': view.period = el.dataset.v; render(); break;
     case 'backup': backupModal(); break;
   }
 });

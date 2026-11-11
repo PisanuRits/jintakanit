@@ -3,7 +3,7 @@
 set -e
 cd $(dirname "$0")
 OUT=$1; mkdir -p "$OUT"
-VERSION=1.0.1
+VERSION=1.1.0
 {
 cat <<HTML
 <!doctype html>

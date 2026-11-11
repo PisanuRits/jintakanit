@@ -211,3 +211,19 @@ table.hist tr.row{cursor:pointer}
   .kpis{grid-template-columns:1fr 1fr}
   .srow{flex-direction:column}
 }
+
+/* ---------- Progress ---------- */
+.segtabs{display:flex;background:var(--soft);border-radius:14px;padding:4px;gap:4px}
+.segtabs button{height:40px;padding:0 18px;border-radius:11px;border:0;background:transparent;font-size:16px;color:var(--muted)}
+.segtabs button.on{background:#fff;color:var(--ink);font-weight:600}
+.pgrid{display:grid;grid-template-columns:1fr 1fr;gap:18px}
+.phead{display:flex;justify-content:space-between;align-items:baseline;gap:10px;flex-wrap:wrap}
+.phead span{font-size:13px;color:var(--muted)}
+.pchart{width:100%;height:auto;display:block}
+.pwrap{display:flex;gap:14px;align-items:stretch}
+.passbox{flex:1;background:var(--lav-l);border-radius:16px;padding:14px;display:flex;flex-direction:column;gap:8px;min-width:0}
+.passitem{background:#fff;border-radius:10px;padding:8px 10px;font-size:14px;display:flex;align-items:center;gap:8px}
+.passtag{font-size:12px;background:#DDF2EA;color:var(--mint-d);border-radius:999px;padding:1px 8px;font-weight:600}
+.lcard.test .passtag{background:#fff}
+.ver{font-size:12px;color:var(--lav-text);text-align:center;padding-top:4px}
+@media (max-width:900px){.pgrid{grid-template-columns:1fr}.pwrap{flex-direction:column}.ver{display:none}}
